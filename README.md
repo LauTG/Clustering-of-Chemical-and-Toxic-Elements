@@ -1,4 +1,7 @@
 # Clustering-of-Chemical-and-Toxic-Elements
+
+![Made with RStudio](https://img.shields.io/badge/Made%20with-RStudio-blue?logo=rstudio)
+
 Este repositorio contiene el **reporte estadístico anonimizado** de un estudio observacional con cuantificación de **elementos químicos y compuestos ambientales** en muestras biológicas. Se ha eliminado o generalizado cualquier referencia que pueda identificar el estudio, la institución, la cohorte o el diagnóstico específico.
 
 ## Alcance
