@@ -1,0 +1,883 @@
+---
+title: "Análisis estadístico de elementos químicos y compuestos ambientales (versión anonimizada)"
+subtitle: "Reporte descriptivo y multivariante (anonimizado)"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: no
+    toc_depth: 4
+    css: estilo.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = F,
+	fig.align = "center",
+	fig.pos = "H",
+	message = FALSE,
+	warning = FALSE,
+	cache = FALSE,
+	comment = "",
+	out.extra = "",
+	tidy = TRUE,
+	tidy.opts = list(width.cutoff = 60)
+)
+library(readxl)
+library(Hmisc)
+library(gdata)
+library(kableExtra)
+library(compareGroups)
+library(ggpubr)
+library(gam)
+library(tinytex)
+library(geometry)
+library(formatR)
+library(ggplot2)
+library(nortest)
+library(car)
+library(gridExtra)
+library(grid)
+library(ggfortify)
+library(reshape)
+library(broom)
+library(faraway)
+library(tidyverse)
+library(pwr)
+library(naniar)
+library(jtools)
+library(ggpubr)
+library(agricolae)
+library(olsrr)
+library(lmtest)
+library(ggeffects)
+library(DHARMa)
+library(parameters)
+library(huxtable)
+library(ggsci)
+library(ggprism)
+library(patchwork)
+library(rstatix)
+library(ggrepel)
+library(lubridate)
+
+library(showtext) #para usar fuente personalizada en gráficos
+library(RColorBrewer) #paleta para graficos
+
+library(factoextra) #grafica PCA
+library(FactoMineR) #calcula PCA
+library(cluster) #Para algoritmos y metricas de clustering
+library(mclust) #Para clustering gmm
+library(clue) #etiqueta consenso entre algoritmos
+```
+
+```{r}
+## CARGAR CAMBRIA PARA GRAFICOS ##
+# Registrar Cambria desde .ttc usando índice 1 (probablemente sea la variante normal)
+font_add(family = "Cambria", regular = "C:/Windows/Fonts/cambria.ttc")
+
+# Activar renderizado
+showtext_auto()
+
+```
+
+<br>
+<hr style="border-top: 2px solid black;">
+
+**Metodología**
+
+El análisis experimental llevado a cabo se centró en la cuantificación en sangre de un amplio panel de elementos químicos y contaminantes orgánicos persistentes (POPs). Se incluyeron elementos traza esenciales (Li, Mn, Fe, Co, Zn, Cu, Si, Mg), macroelementos (Na, Se, Mo, P, S, K), elementos minoritarios (Rb, Ca, Ga, Ru, Y, In, Nb, La, Ce, Pr, Sm, Eu, Gd, Nd, Tb, Dy, Ho, Er, Tm, Yb, Lu, Ta, Os, Pt, Au), potencialmente tóxicos (Be, B, Al, Ti, V, Cr, Ni, Sr, Sn, Sb, Cs, Ba, Bi, Tl, Th, U), y elementos altamente tóxicos (As, Cd, Hg, Pb). Asimismo, se determinaron compuestos organoclorados persistentes, incluyendo p,p’-DDE, hexaclorobenceno, hexaclorociclohexano-beta y los congéneres PCB-28, PCB-118, PCB-138, PCB-153, PCB-156 y PCB-180.
+
+Para el analisis estadístico, se estandarizarán todas las concentraciones con z-score para neutralizar diferencias de escala entre variables y evitar que dominen las distancias. Se explorarán múltiples algoritmos de clustering y variantes de distancia: jerárquico aglomerativo (enlace Ward con euclídea por su coherencia con la minimización de WSS, y enlaces average/complete con Manhattan y Canberra por mayor robustez ante asimetrías y valores extremos), k-means (inicializado con centroides de Ward para estabilizar la solución), PAM/k-medoids (Manhattan) y un modelo de mezclas gaussianas (GMM) con selección de número de componentes y forma por BIC. La calidad interna se valorará con silhouette, la concordancia entre particiones con ARI, y, si procede, se construirá una etiqueta consenso. La PCA se empleará solo como apoyo visual (no como paso previo obligatorio). La interpretación clínica se basará en descriptivas por clúster y un ranking global de variables.
+
+Referencias utilizadas:
+
+- Everitt BS, Hothorn T. An Introduction to Applied Multivariate Analysis with R. Springer.  
+- Hair JF et al. Multivariate Data Analysis (7th, rev.). Pearson. 
+- Manly, Bryan F.J.; Navarro Alberto, Jorge A. Multivariate Statistical Methods. Fourth Edition, 2016.  
+- James G, Witten D, Hastie T, Tibshirani R. An Introduction to Statistical Learning with Applications in R. Springer.  
+
+<br><br>
+<hr style="border-top: 2px solid black;">
+
+## 1. Descriptivos
+
+<br>
+
+```{r}
+rm(list=ls())
+df<-read_csv('DATA_2025-05-06.csv')
+```
+
+```{r, results='hide'}
+str(df[,340:407]) #todas las variables de toxicos son numericas
+```
+
+```{r}
+bloques <- list(
+  "Elementos traza esenciales"= c("li","mn","fe","co","zn","cu","si","mg"),
+  "Macroelementos"             = c("na_2","se","mo","p","s","k_2"),
+  "EES minoritarios"           = c("rb","ca","ga","ru","y","in","nb","la_2","ce","pr","sm_2","eu","gd","nd","tb","dy","ho","er","tm","yb","lu","ta","os","pt","au"),
+  "Potencialmente tóxicos"     = c("be","b","al","ti","v","cr","ni","sr","sn","sb","cs","ba","bi","tl","th","u"),
+  "Altamente tóxicos"          = c("as","cd","hg","pb"),
+  "POPs"                       = c("dde","hexachlorobenzene","hexaclorociclohexano_beta","pcb_28","pcb_118","pcb_138","pcb_153","pcb_156","pcb_180"))
+
+for(i in 1:length(bloques)){
+  tab <- descrTable(~ ., df[c(unlist(bloques[[i]]))], 
+                    method = 2)
+  assign(paste0("tab",i), tab)
+}
+export2md(rbind(
+  "Elementos traza esenciales"=tab1, 
+  "Macroelementos"=tab2,
+  "EES minoritarios"=tab3,
+  "Potencialmente tóxicos"=tab4,
+  "Altamente tóxicos"=tab5,
+  "POPs"=tab6), header.label=c("all"="Median [IQR]", "N"="Válidos"),
+  caption="Tabla 1: Resumen descriptivo")
+```
+
+
+<br>
+
+Disponemos de 203 pacientes válidos con todas las medidas realizadas. Los 110 pacientes con NAs en cada variable paracen ser los mismos. Las variables muestran unas medidas descriptivas bastante asimétricas, con importantes desviaciones de la normalidad. Hay 11 variables con todo valores 0 que se eliminarán. Se comprueba a continuación su distribución de manera visual y las correlaciones entre ellas.
+
+<br>
+
+
+```{r, fig.dim=c(12,15)}
+df %>%
+  select(340:407) %>%
+  pivot_longer(everything(), names_to = "variable", values_to = "value") %>%
+  filter(!is.na(value)) %>%
+  group_by(variable) %>%
+  filter(sd(value) > 0) %>%   #descarta variables con todos ceros o sin variación
+  ungroup() %>%
+  ggplot(aes(x = value)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 30, fill = "grey70", color = "white", alpha = 0.7) +
+  geom_density(linewidth = 0.8, na.rm = TRUE) +
+  facet_wrap(~ variable, scales = "free", ncol = 7) + 
+  labs(title = "Distribución de variables (histograma + densidad)",
+       x = NULL, y = "Density") +
+  theme_minimal(base_size = 20,base_family = "Cambria")+
+  theme(
+    strip.text = element_text(size = 20, face = "bold"),   # tamaño nombres variables
+    plot.title = element_text(size = 30, face = "bold")    # título general
+  )
+```
+
+<br>
+
+```{r}
+cor_mat<-df %>%
+  select(340:407) %>%
+  select(where(~ sd(., na.rm = TRUE) > 0)) %>%
+  cor(., use = "pairwise.complete.obs", method = "spearman")
+
+cor_mat <- cor_mat %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("var1") %>%
+  tidyr::pivot_longer(-var1, names_to = "var2", values_to = "cor") %>%
+  filter(var1 < var2) %>%              # evita duplicados y la diagonal
+  filter(abs(cor) > 0.5) %>%           # umbral de correlación
+  arrange(desc(abs(cor)))
+
+cor_mat %>%
+  kbl(caption = "Tabla 2. Correlaciones entre variables") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14) %>%
+  footnote(
+    general = "Solo se muestran las variables con correlaciones mayores al 0.5 en valor absoluto",
+    general_title = "Nota:",
+    footnote_as_chunk = TRUE
+  )
+```
+
+<br>
+
+Lo que se observa en la matriz de correlaciones es que varios policlorobifenilos (pcb_138, pcb_153 y pcb_180) presentan una correlación muy alta entre ellos, lo que indica que son prácticamente redundantes. Además, pcb_118 y pcb_156 también muestran una asociación relevante, y hexachlorobenzene se correlaciona estrechamente tanto con los PCBs como con hexaclorociclohexano_beta y dde, configurando un bloque de compuestos organoclorados. En cuanto a los macroelementos, se observa un grupo constituido por hierro, potasio, fósforo y azufre, que presentan correlaciones moderadas a altas entre sí esperable ya que reflejan un metabolismo conjunto. También se identifican pares de variables correlacionadas de manera consistente, como cesio con rubidio, aluminio con itrio, cobalto con uranio, cerio con lantano y calcio con sodio. Estos hallazgos sugieren la existencia de varios conjuntos de variables redundantes que podrían resumirse o representarse mediante una sola variable o un componente principal para simplificar el análisis posterior.
+
+<br><br>
+<hr style="border-top: 2px solid black;">
+
+## 2. Reducción de dimensionalidad con PCA
+
+<br>
+
+```{r}
+subg<-df %>%
+  select(340:407) %>%
+  select(where(~ sd(., na.rm = TRUE) > 0))%>%
+  filter(if_any(everything(), ~ !is.na(.)))
+
+```
+<br>
+
+### Varianza explicada por componente
+
+<br>
+```{r, fig.dim=c(6,4)}
+res.pca <- PCA(subg, graph = FALSE)
+
+fviz_eig(res.pca, addlabels = TRUE, barfill = "grey70", barcolor = "grey30") +
+  theme_minimal(base_size = 15, base_family = "Cambria")
+```
+<br>
+
+Las dos primeras PCs explican el 20% de la varianza, si sumamos la tercera solo llegamos al 27%. La cohorte tiene un perfil químico heteogeneo y diverso.
+
+<br>
+
+### Individuos (pacientes) en PC1–PC2
+
+<br>
+
+```{r}
+fviz_pca_ind(res.pca,geom.ind = "point",pointshape = 16,pointsize = 2,col.ind = "cos2") +
+  scale_color_gradientn(colors = c("blue","green","yellow","red")) +
+  theme_minimal(base_size = 20, base_family = "Cambria")
+```
+
+<br>
+
+Este gráfico muestra la proyección de los pacientes en el plano definido por los dos primeros componentes principales de la PCA. Cada punto es un paciente y su posición refleja la combinación de valores en las variables químicas y tóxicas que más pesan en esos componentes. El eje horizontal (Dim1) recoge un 10,4% de la varianza total y el vertical (Dim2) un 9,6%, de modo que juntos explican en torno al 20% de la variabilidad de los datos.
+
+El color de los puntos corresponde al cos2, que indica la calidad de la representación de cada paciente en este plano. Los puntos en rojo o naranja tienen cos2 alto y están bien representados en PC1–PC2, mientras que los puntos en azul o violeta tienen cos2 bajo y su variabilidad se explica mejor en otros componentes. Se observan algunos pacientes muy alejados del centro que definen subperfiles distintos (outliers o posibles grupos), mientras que la mayoría se concentra cerca del origen, lo que indica perfiles más similares y con menor peso en los dos primeros ejes.
+
+<br>
+
+### Variables (cargas) en PC1–PC2
+
+<br>
+
+```{r}
+fviz_pca_var(res.pca, col.var = "contrib",labelsize = 8) +
+  scale_color_gradientn(colors = c("blue","green","yellow","red")) +
+  theme_minimal(base_size = 20,base_family = "Cambria")
+```
+<br>
+
+
+Los vectores representan cada variable. La dirección indica hacia dónde influye la variable en el espacio de componentes y la longitud refleja cuánto aporta a explicar la variabilidad en estos dos ejes. Los colores muestran la contribución relativa: las variables en rojo y amarillo contribuyen más a los dos primeros componentes, mientras que las azules o violetas aportan menos. Cuando varias variables aparecen juntas y apuntando en la misma dirección significa que están fuertemente correlacionadas y definen un eje común.
+
+La variación más visible en la cohorte, cuando se comprime a 2 dimensiones, está dominada por un bloque de organoclorados en el eje vertical PC2 (PCBs, hexaclorobenceno, DDE) y por un bloque de macroelementos en el eje horizontal PC1 (p, s, mg, ca, rb, fe, k).
+El resto de variables se sitúan cerca del centro, lo que indica que su variabilidad no se explica bien por estos dos componentes y se distribuye en otros ejes de la PCA.
+
+<br><br>
+<hr style="border-top: 2px solid black;">
+
+## 3. Análisis de Clusters
+
+<br>
+
+### Analisis exploratorio con Clustering jerárquico aglomerativo
+
+<br>
+
+```{r}
+#Seleccionar y limpiar df subset con id para luego poder volver a unirlo al df original
+
+tox_cols <- 340:407
+id_col   <- "id_paciente"
+
+X_all <- df %>% select(all_of(id_col), all_of(tox_cols))
+
+# quitar variables con sd = 0
+sd_vec <- sapply(X_all[, -1, drop = FALSE], function(x) sd(x, na.rm = TRUE))
+keep_vars <- names(sd_vec)[sd_vec > 0]
+drop_vars <- names(sd_vec)[sd_vec == 0]
+
+X <- X_all %>%
+  select(all_of(id_col), all_of(keep_vars)) %>%
+  # eliminar filas con NA en cualquiera de las químicas retenidas
+  filter(if_all(all_of(keep_vars), ~ !is.na(.)))
+```
+
+```{r}
+# Estandarizo porque no conozco las unidades de medida y asumo que son de diferente magnitud
+X_mat  <- as.matrix(X[, keep_vars, drop = FALSE])
+X_z    <- scale(X_mat)               # media 0, sd 1
+rownames(X_z) <- X[[id_col]]         # para trazar IDs
+```
+
+```{r}
+# Elijo distancia euclídea con método de Ward.D2 ya que es la mas adecuada para datos continuos estandarizados
+d  <- dist(X_z, method = "euclidean")
+hc <- hclust(d, method = "ward.D2")
+
+# Elegir k por silhouette (2 a 8 clústers)
+k_grid <- 2:8
+sil_vals <- sapply(k_grid, function(k) {
+  cl <- cutree(hc, k = k)
+  mean(silhouette(cl, d)[, 3])
+})
+k <- k_grid[which.max(sil_vals)]
+
+# Partición jerárquica óptima
+cl_hc <- cutree(hc, k = k)
+
+```
+
+```{r}
+#Dibujar dendrograma
+
+pal <- c("#7570B3","#D95F02","#1B9E77")
+
+p_dend <- fviz_dend(hc, k = k,
+                    cex = 1,
+                    k_colors = pal,
+                    rect = TRUE, rect_fill = TRUE, 
+                    rect_border = pal,          # rectángulos de clúster
+                    horiz = F,                   # horizontal (opcional)
+                    lwd = 0.6) +
+  labs(title = "Dendrograma (Método de Ward, distancia euclídea)",
+       subtitle = paste0("k = ", k, " | silhouette medio = ",
+                         round(max(sil_vals), 3)))
+
+print(p_dend)
+
+```
+
+<br>
+
+Se han estandarizado las variables con z-score (media 0, DE 1) ya que se desconoce con certeza las unidades de medida originales y, en cualquier caso, difieren entre elementos, de modo que sin estandarizar unas variables dominarían las distancias. Al trabajar con variables continuas estandarizadas es coherente usar distancia euclídea como medida de similitud. Se ha elegido el método jerárquico aglomerativo de Ward porque en cada fusión minimiza el incremento de la suma de cuadrados intra-cluster (WSS), lo que favorece grupos compactos y homogéneos, y porque su criterio está formulado de forma consistente con la euclídea (al cuadrado). 
+
+En el dendrograma se han seleccionado 3 clústers, ya que presentaban la mejor métrica de calidad (silhouette medio ≈ 0,302), lo que sugiere separación débil: existe patrón de agrupación, aunque las fronteras no son tajantes. Se observa un clúster derecho (lila) compacto y bien separado del resto (fusión a alturas altas), un clúster izquierdo (verde) pequeño y compacto compatible con un subperfil poco frecuente, y un clúster central (naranja) mayor y más heterogéneo con fusiones a distintas alturas que apuntan a subestructura interna. 
+
+<br>
+
+### Algoritmo K-means
+
+<br>
+
+Se empleará k-means con centrides derivados del jerárquico, dado que ambos métodos comparten el criterio de minimizar la WSS. El paso jerárquico proporciona una estructura inicial interpretable y un número de clusters razonables. Además, sus centroides se utilizarán como inicializaciones sólidas, con lo que se reduce la sensibilidad de k-means a puntos de partida aleatorios y se acelera la convergencia hacia particiones más compactas y homogéneas. De este modo, se mantiene la lectura clínica del dendrograma y, a la vez, se refina la solución optimizando la WSS. La partición de k-means se adoptará únicamente si mejora las métricas internas.
+
+<br>
+
+```{r}
+probar_kmeans_desde_hc <- function(X_z, hc, ks = 3:5, d) {
+  res <- lapply(ks, function(k){
+    cl_hc <- cutree(hc, k = k)
+    centers_init <- aggregate(X_z, by = list(cl_hc), mean)[ , -1]   # centroides en z
+    km <- kmeans(X_z, centers = as.matrix(centers_init), iter.max = 100)
+    sil <- mean(silhouette(km$cluster, d)[, 3])
+    data.frame(k = k, silhouette = sil, WSS = km$tot.withinss) |>
+      mutate(model = I(list(km)), seeds = I(list(centers_init)))
+  })
+  bind_rows(res)
+}
+
+set.seed(123)
+comparativa <- probar_kmeans_desde_hc(X_z, hc, ks = 3:5, d = d)
+
+# Elegir el mejor k y extraer su modelo
+best_row <- comparativa[which.max(comparativa$silhouette), ]
+k_opt_km <- best_row$k
+km_best  <- best_row$model[[1]]
+
+cat("Mejor k (k-means con semillas de Ward):", k_opt_km,
+    " | silhouette =", round(best_row$silhouette, 3), "\n")
+```
+<br>
+
+La métrica de calidad obtenida por k-means es un poco peor que la obtenida por el método jerárquico.
+
+<br>
+
+```{r}
+pal <- c("#1B9E77","#D95F02","#7570B3")
+fviz_cluster(list(data = X_z, cluster = km_best$cluster),
+             geom = "point", ellipse.type = "norm",cex = 1,
+             palette = pal, show.clust.cent = TRUE,
+             main = "k-means (Visualización en PC1–PC2)")
+```
+
+<br>
+
+### Alternativas más robustas a valores extremos (outliers)
+
+<br>
+
+Dado que la mayoria de las variables presentan una distribución sumamente asimétrica con colas largas a la derecha, representando valores extremos, se decide probar el algoritmo jerárquico con otras distancias más robustas distintas a la euclídea con otros métodos de agrupamiento y explorar la calidad interna de los clústers formados.
+
+<br>
+
+```{r}
+# 1) Manhattan + complete
+d_manh <- dist(X_z, "manhattan")
+hc_manh <- hclust(d_manh, method = "complete")
+sil_manh <- sapply(k_grid, \(k) mean(silhouette(cutree(hc_manh,k), d_manh)[,3]))
+
+# 2) Canberra + average
+d_canb <- dist(X_z, "canberra")
+hc_canb <- hclust(d_canb, method = "average")
+sil_canb <- sapply(k_grid, \(k) mean(silhouette(cutree(hc_canb,k), d_canb)[,3]))
+
+# 3) 1 - Spearman (perfil) + average
+d_spear <- as.dist(1 - cor(t(X_z), method = "spearman"))
+hc_spear <- hclust(d_spear, method = "average")
+sil_spear <- sapply(k_grid, \(k) mean(silhouette(cutree(hc_spear,k), d_spear)[,3]))
+
+rbind(Manhattan = sil_manh, Canberra = sil_canb, Spearman = sil_spear)
+```
+
+<br>
+
+Se evaluó la distancia de Manhattan, definida como la suma de diferencias absolutas entre observaciones. Por construcción, Manhattan no eleva al cuadrado las discrepancias (a diferencia de la euclídea/cuadrática), lo que reduce el peso de desviaciones muy grandes y es más robusta frente a valores extremos. Con jerárquico (complete/average) y Manhattan se observó silhouette ≈0,59 (k=2) y aún moderada con k=3–4 (≈0,47–0,45), indicando dos perfiles principales con posible subestructura. También se probó Canberra (pondera diferencias relativas y da más peso a valores cercanos a cero): mostró separación moderada (≈0,31 en k=2) y decreciente con k mayores. Por último, se exploró 1 – correlación de Spearman (mide similitud de perfil/rangos más que de magnitud), con resultados bajos (≈0,11–0,16), sugiriendo que la magnitud de las exposiciones separa mejor que la forma relativa.
+
+En consecuencia, se priorizará Manhattan para la solución principal con jerárquico complete por su robustez y mejor separación, manteniéndose Ward.D2-euclídea como referencia inicial. Para el enfoque particional con distancias no euclídeas, se considerará PAM (k-medoids) como confirmación de robustez y coherencia clínica de los perfiles identificados.
+
+<br>
+
+```{r}
+k <- 2
+pal <- c("#7570B3","#D95F02")
+fviz_dend(hc_manh, k = k, k_colors = pal, rect = TRUE, rect_fill = TRUE,
+          color_labels_by_k = TRUE, cex = 0.7,rect_border = pal,
+          main = "Dendrograma (complete + Manhattan)")
+```
+
+<br>
+
+```{r}
+pam_res <- lapply(k_grid, \(kk) pam(X_z, k = kk, metric = "manhattan"))
+sil_pam <- sapply(seq_along(pam_res), \(i) {
+  mean(silhouette(pam_res[[i]]$clustering, d_manh)[,3])
+})
+data.frame(k = k_grid, silhouette_pam = sil_pam)
+
+## Visual rápido del mejor PAM
+best_i <- which.max(sil_pam)
+pam_best <- pam_res[[best_i]]
+pal <- c("#D95F02","#7570B3")
+fviz_cluster(list(data = X_z, cluster = pam_best$clustering),
+             palette = pal,
+             geom = "point", ellipse.type = "norm",
+             main = paste0("PAM Manhattan | k=", k_grid[best_i],
+                           " | silhouette=", round(max(sil_pam),3)))
+```
+<br>
+
+Con jerárquico + Manhattan (k=2) se obtuvo una silhouette ≈ 0,59, lo que se interpreta como separación fuerte entre dos perfiles de exposición, pero en uno de los clusters solo hay un paciente, seguramente un outlier que ha sido aislado, por lo que se descarta este algoritmo. Con PAM + Manhattan (k=2) la silhouette ≈ 0,35, indicando separación moderada. La diferencia se explica porque PAM ancla cada grupo en un medoide (observación real) y minimiza la suma de disimilitudes a ese punto, lo que puede desplazar fronteras cuando existen grupos alargados, desbalanceados o con casos intermedios.
+
+<br>
+
+### Gaussian mixture model (GMM)
+
+<br>
+
+El GMM es un modelo probabilístico en el que se considera que las observaciones siguen una distribución probabilística formada por la combinación de múltiples distribuciones normales (componentes). Puede entenderse como una generalización de K-means con la que, en lugar de asignar cada observación a un único cluster, se obtiene una distribución probabilidad de pertenencia a cada uno.
+
+En este enfoque, la población se modela como una mezcla finita de densidades (aquí, normales multivariadas) y cada observación se asigna al grupo con mayor probabilidad posterior; el número de componentes y las restricciones en las covarianzas (esféricas, diagonales o elipsoidales) se eligen por BIC, pudiendo incluso resultar un solo clúster si no hay estructura útil. La estimación se realiza por Expectation-Maximization (EM), y las probabilidades posteriores permiten cuantificar la incertidumbre de pertenencia caso a caso. Este enfoque complementa a los métodos basados en distancias al proporcionar una formulación estadística con criterio objetivo de selección de modelo y formas de clúster flexibles (tamaños/formas/orientaciones distintas), adecuadas para datos multivariados heterogéneos.
+
+A continuación, se ajustarán modelos de la familia MCLUST (EII, VII, EEI, VVI, EEE, VVV) para G = 1–6 componentes; BIC determinará el par (G, modelo) óptimo, y se reportarán clasificación, incertidumbre y una visualización en el plano de componentes principales.
+
+<br>
+
+```{r}
+set.seed(123)
+mc <- Mclust(X_z, G = 1:6, modelNames = c("EII","VII","EEI","VVI","EEE","VVV"))
+```
+
+```{r}
+summary(mc)                    # tabla resumida (G, modelo, BIC)
+cat("Mejor Silhouette:",mean(silhouette(mc$classification, dist(X_z))[,3]))
+plot(mc, what = "BIC")        # BIC por G y modelo
+```
+
+<br>
+
+GMM ha seleccionado tres clusters bajo el modelo VII (esférico con volúmenes distintos) por BIC. La silhouette media de la clasificación resultante ha sido de 0,27, inferior a la obtenida por los anteriores algoritmos.
+
+<br>
+
+
+```{r}
+pal <- c("#1B9E77","#D95F02","#7570B3")
+fviz_cluster(list(data = X_z, cluster = mc$classification),palette = pal,
+             geom = "point", ellipse.type = "norm",
+             main = "GMM modelo esférico (Visualización en PC1–PC2)")
+```
+
+<br><br>
+<hr style="border-top: 2px solid black;">
+
+## 4. Características de los clusters
+
+<br>
+
+### Tamaño y importancia de cada variable en la formación del cluster
+
+<br>
+
+Para cada uno de los agloritmos de clustering seleccionados se reportan: tamaño de cada cluster, Variables definitorias por clúster y Ranking global de variables por capacidad de discriminación.  
+
+- **Tabla Variables definitorias por clúster (|z| medio)**: Se listan, para cada clúster, las variables con mayor |z| medio. El signo de z_mean indica si la variable está elevada (positivo) o disminuida (negativo) respecto al promedio global del estudio; abs_z refleja la intensidad del rasgo.  
+- **Tabla Ranking global de variables por capacidad de discriminación (n² ANOVA)**: Se ordenan las variables por n² (eta2 en la tabla), que cuantifica la proporción de varianza explicada por cada clúster (mayor n² -> mayor capacidad discriminativa). El estadístico F resume el contraste ANOVA; p y p_adj (FDR) informan la significación tras ajuste por multiplicidad. La priorización se basará en η² (efecto) y se apoyará en p_adj; la dirección del efecto se interpretará consultando la tabla anterior.  
+
+
+
+```{r}
+load("./data.rda")
+```
+
+```{r}
+#========================
+# Funciones auxiliares
+#========================
+# === 1) Top por clúster en formato tabla (cluster, rank, variable, z_mean, abs_z)
+top_vars_table <- function(Xz, cl, top = 10, digits = 3){
+  centers <- aggregate(Xz, by = list(cluster = cl), mean)
+  centers |>
+    as_tibble() |>
+    pivot_longer(-cluster, names_to = "variable", values_to = "z_mean") |>
+    group_by(cluster) |>
+    mutate(abs_z = abs(z_mean)) |>
+    arrange(desc(abs_z), .by_group = TRUE) |>
+    mutate(rank = row_number()) |>
+    slice_head(n = top) |>
+    ungroup() |>
+    select(cluster, rank, variable, z_mean, abs_z) |>
+    mutate(z_mean = round(z_mean, digits),
+           abs_z  = round(abs_z,  digits)) |>
+    arrange(cluster, rank) |>
+    as.data.frame()
+}
+
+# === 2) Ranking global (ANOVA -> eta2 + p + FDR) también como data.frame
+rank_global_table <- function(Xz, cl, digits = 3){
+  Xdf <- as.data.frame(Xz); Xdf$cluster <- factor(cl)
+  out <- map_dfr(colnames(Xz), function(v){
+    fit <- aov(Xdf[[v]] ~ Xdf$cluster)
+    ss  <- summary(fit)[[1]]
+    data.frame(
+      variable = v,
+      F        = ss[1, "F value"],
+      p        = ss[1, "Pr(>F)"],
+      eta2     = ss[1, "Sum Sq"] / sum(ss[, "Sum Sq"])
+    )
+  }) |>
+    mutate(p_adj = p.adjust(p, method = "fdr")) |>
+    arrange(desc(eta2)) |>
+    mutate(F = round(F, digits),
+           eta2 = round(eta2, digits),
+           p = signif(p, 3),
+           p_adj = signif(p_adj, 3)) |>
+    as.data.frame()
+  out
+}
+
+# ===== tamaños de cada cluster
+
+cluster_sizes <- function(labels, add_prop = TRUE){
+  tab <- table(labels)
+  out <- data.frame(cluster = names(tab), n = as.integer(tab), row.names = NULL)
+  if (add_prop) out$prop <- round(out$n / sum(out$n), 3)
+  out[order(out$cluster), , drop = FALSE]
+}
+```
+
+<br>
+
+**Clustering jerarquico aglomerativo (Euclídea, Ward)**
+
+<br>
+
+```{r}
+n_hca_eucl<-cluster_sizes(cl_hc) 
+top_hca_eucl  <- top_vars_table(X_z, cl_hc, top = 10)
+rank_hca_eucl <- rank_global_table(X_z, cl_hc)
+
+n_hca_eucl %>%
+  kbl(caption = "Tamaño de cada cluster") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14)
+
+
+top_hca_eucl %>%
+  kbl(caption = "Variables definitorias por clúster") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14) %>%
+  footnote(
+    general = "Solo se muestran las 10 más importantes",
+    general_title = "Nota:",
+    footnote_as_chunk = TRUE
+  )
+
+rank_hca_eucl[rank_hca_eucl$eta2 >= 0.14, ] %>%
+  kbl(caption = "Ranking global") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14)%>%
+  footnote(
+    general = "Solo se muestran las variables con eta2 mayor a 0.14, indicando una alta capacidad discriminativa de la variable ",
+    general_title = "Nota:",
+    footnote_as_chunk = TRUE
+  )
+```
+
+<br>
+
+Se identificaron 3 clústeres desbalanceados (n=17; 178; 7). El clúster 1 se caracterizó por elevación marcada de POPs (p. ej., PCB-118, hexachlorobenzene, β-HCH, PCB-156), mientras que el clúster 3 mostró descensos pronunciados de macro/elementos esenciales (Mg, Fe, Zn, Cu, Mn; z negativos), compatible con un perfil “macroelementos bajos”; el clúster mayoritario presentó valores intermedios. En el ranking global, los macroelementos (Na, Ca, K, S, P, Mg, Fe) concentraron la mayor capacidad discriminativa (eta2≈0.35–0.57), junto con algunos POPs (PCB-118, hexachlorobenzene), sustentando que la separación se explica sobre todo por el bloque de macroelementos y, en menor medida, por organoclorados.
+ 
+<br><br>
+
+**Clustering k-means**
+
+<br>
+
+
+```{r}
+n_km<-cluster_sizes(km_best$cluster) 
+top_km  <- top_vars_table(X_z, km_best$cluster, top = 10)
+rank_km <- rank_global_table(X_z, km_best$cluster)
+
+n_km %>%
+  kbl(caption = "Tamaño de cada cluster") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14)
+
+
+top_km %>%
+  kbl(caption = "Variables definitorias por clúster") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14) %>%
+  footnote(
+    general = "Solo se muestran las 10 más importantes",
+    general_title = "Nota:",
+    footnote_as_chunk = TRUE
+  )
+
+rank_km[rank_km$eta2 >= 0.14, ] %>%
+  kbl(caption = "Ranking global") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14)%>%
+  footnote(
+    general = "Solo se muestran las variables con eta2 mayor a 0.14, indicando una alta capacidad discriminativa de la variable ",
+    general_title = "Nota:",
+    footnote_as_chunk = TRUE
+  )
+```
+
+<br>
+
+Se obtuvieron 3 clústeres (n=23; 172; 7) con estructura similar a la del jerárquico.El clúster 1 volvió a definirse por mayor carga de POPs (PCB-156/153/138/180), y el clúster 3 por valores bajos de macroelementos; el grupo central mantuvo un perfil intermedio. En el ranking global, se replicó la importancia de Na, Ca, K, S, P, Mg y Fe (eta2 altas), con hexachlorobenzene y trazas como Zn/Cu aportando discriminación adicional, lo que confirma la coherencia del patrón respecto al jerárquico.
+
+<br><br>
+
+**Clustering GMM**
+
+<br>
+
+```{r}
+
+cl_gmm <- mc$classification
+attr(cl_gmm, "G") <- mc$G
+attr(cl_gmm, "model") <- mc$modelName
+```
+
+
+```{r}
+n_gmm<-cluster_sizes(cl_gmm) 
+top_gmm  <- top_vars_table(X_z, cl_gmm, top = 10)
+rank_gmm <- rank_global_table(X_z, cl_gmm)
+
+n_gmm %>%
+  kbl(caption = "Tamaño de cada cluster") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14)
+
+
+top_gmm %>%
+  kbl(caption = "Variables definitorias por clúster") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14) %>%
+  footnote(
+    general = "Solo se muestran las 10 más importantes",
+    general_title = "Nota:",
+    footnote_as_chunk = TRUE
+  )
+
+rank_gmm[rank_gmm$eta2 >= 0.14, ] %>%
+  kbl(caption = "Ranking global") %>%
+  kable_classic(full_width = FALSE, html_font = "Cambria") %>%
+  kable_styling(font_size = 14)%>%
+  footnote(
+    general = "Solo se muestran las variables con eta2 mayor a 0.14, indicando una alta capacidad discriminativa de la variable ",
+    general_title = "Nota:",
+    footnote_as_chunk = TRUE
+  )
+```
+
+<br>
+
+Se seleccionaron 3 componentes por BIC, con tamaños (n=49; 146; 7). El clúster 1 se caracterizó por elevaciones moderadas de POPs (beta-HCH, PCB-156/138/153), mientras que el clúster 3 presentó disminución marcada de macroelementos (Na, Ca, K, S, P, Mg, Fe), reproduciendo el patrón “macroelementos bajos”; el clúster 2 concentró la mayoría de pacientes con niveles intermedios. En el ranking global, los macroelementos (Na, Ca, K, S, P, Mg, Fe) y varios POPs volvieron a situarse entre las variables con mayor eta2, reforzando que la separación principal se articula por intensidad de macroelementos y carga de organoclorados.
+
+<br>
+
+**Lectura conjunta**: De forma consistente entre algoritmos, se describieron tres perfiles: (i) “POPs alto” (subgrupo menor), (ii) “intermedio” mayoritario, y (iii) “macroelementos bajo” (subgrupo muy pequeño).
+
+<br><br>
+
+### Consenso entre algoritmos
+
+<br>
+
+El Índice Rand Ajustado (ARI) se emplea para cuantificar la concordancia entre dos algoritmos de clustering de los mismos datos, ajustada por el acuerdo esperado al azar. Su rango es [-1, 1]: 1 indica acuerdo perfecto, ≈0 acuerdo aleatorio y valores <0 peor que azar. Se usa para respaldar, con una métrica única, la coherencia entre algoritmos y ayudar a elegir la solución principal:
+
+<br>
+
+```{r}
+#Primero se alinean los “nombres” de los clústeres entre métodos (para que el “1/2/3” signifique lo mismo en todos) con solve_LSAP de clue y después se calcula la etiqueta de consenso por mayoría.
+
+# Alinear etiquetas de 'new' a 'ref'
+align_to_ref <- function(ref, new){
+  ref <- as.integer(factor(ref))
+  new <- as.integer(factor(new))
+  tab <- table(ref, new)
+  K   <- max(nrow(tab), ncol(tab))
+  M   <- matrix(0, K, K); M[1:nrow(tab), 1:ncol(tab)] <- tab
+  perm <- solve_LSAP(max(M) - M)                # columnas(new) -> filas(ref)
+  new_levels <- seq_len(ncol(tab))
+  ref_levels <- seq_len(nrow(tab))
+  map <- setNames(ref_levels[perm[new_levels]], new_levels)
+  as.integer(map[new])
+}
+```
+
+```{r}
+#alineado de clusters con ref=ward
+cl_km_re <- align_to_ref(cl_hc, km_best$cluster)
+cl_gmm_re <- align_to_ref(cl_hc, cl_gmm)
+
+# Consenso si 2 de 3 coinciden por paciente (NA si no hay mayoría)
+consenso <- function(a,b,c){ ifelse(a==b | a==c, a, ifelse(b==c, b, NA_integer_)) }
+
+clusters_df <- data.frame(
+  id          = rownames(X_z),
+  ward     = cl_hc,
+  km       = cl_km_re,
+  gmm      = cl_gmm_re,
+  consenso = consenso(cl_hc, cl_km_re, cl_gmm_re)
+)
+
+#unión de bases
+data_clusters <- data %>%
+  right_join(clusters_df, by = c("id_paciente" = "id"))
+```
+
+```{r}
+#Indice de concordancia entre algoritmos (ARI)
+
+# 1) Juntar etiquetas en un data.frame (mismo orden que X_z)
+labs <- data.frame(
+  Ward   = cl_hc,            
+  Kmeans = cl_km_re,    
+  GMM    = cl_gmm_re,  
+  row.names = rownames(X_z)
+)
+
+# 2) Tabla "larga" de ARI (lista para kbl)
+pairs <- combn(colnames(labs), 2)
+ari_df <- data.frame(
+  Comparacion = apply(pairs, 2, paste, collapse = " vs "),
+  ARI = apply(pairs, 2, function(p)
+    adjustedRandIndex(labs[[p[1]]], labs[[p[2]]]))
+)
+ari_df$ARI <- round(ari_df$ARI, 3)
+
+```
+
+
+```{r,fig.dim=c(7,7)}
+k=3
+pal <- c("#1B9E77", "#D95F02", "#7570B3") 
+
+g1<-fviz_cluster(list(data = X_z, cluster = cl_hc),
+             geom = "point", ellipse.type = "norm",
+             palette = pal, show.clust.cent = TRUE,
+             main = "Jerárquico (Ward)")
+
+g2<-fviz_cluster(list(data = X_z, cluster = cl_km_re),
+             geom = "point", ellipse.type = "norm",cex = 1,
+             palette = pal, show.clust.cent = TRUE,
+             main = "k-means")
+
+
+g3<-fviz_cluster(list(data = X_z, cluster = cl_gmm_re),palette = pal,
+             geom = "point", ellipse.type = "norm",show.clust.cent = TRUE,
+             main = "GMM modelo esférico")
+
+
+tab_gg <- ggtexttable(ari_df, rows = NULL,
+                      theme = ttheme("minimal", base_size = 20))
+
+ggarrange(g1, g2, g3, tab_gg,
+          ncol = 2, nrow = 2,
+          align = "hv",
+          common.legend = TRUE, legend = "bottom")
+```
+
+
+<br>
+
+Se observa un alto acuerdo entre Jerárquico (Ward) y k-means (ARI = 0,798), indicando particiones muy similares. El acuerdo con GMM es moderado-bajo (Ward vs GMM = 0,353; k-means vs GMM = 0,416), lo que sugiere límites de clúster distintos y/o una subdivisión del grupo mayor por parte del modelo GMM.   
+
+Con base en estos resultados y en la coherencia clínica, se ha construido una etiqueta de consenso por mayoría (2 de 3) entre Ward, k-means y GMM, que se utilizará en los análisis clínicos posteriores como opción más estable y robusta.  
+
+Ward y k-means son métodos basados en distancias que minimizan la suma de cuadrados intra-clúster en espacio euclídeo, favoreciendo grupos compactos y aproximadamente esféricos y una asignación “dura” (cada paciente pertenece a un único grupo). GMM, en cambio, es un enfoque basado en modelos que ajusta mezclas gaussianas y decide fronteras probabilísticas; permite tamaños/varianzas distintos (modelo VII elegido) y asignación “suave” (incertidumbre de pertenencia). Estas diferencias de criterio (varianza mínima vs. máxima verosimilitud con covarianza específica) explican que GMM tienda a subdividir el clúster mayor detectado por Ward/k-means y, por ello, muestre menor acuerdo con ellos.
+
+<br><br>
+<hr style="border-top: 2px solid black;">
+
+## 5. Relevancia clínica de los clusters
+
+<br>
+
+```{r}
+data_clusters$progresion<-factor(data_clusters$progresion, c(0,1),c("No","Si"))
+data_clusters$consenso<-as.factor(data_clusters$consenso)
+
+```
+
+
+```{r}
+varsD<-list("Añadir lista de listas de las variables de interés")
+```
+
+```{r,results='hide'}
+for(i in seq_along(varsD)){
+  # (2) Quedarse solo con variables que existen (evita "undefined columns selected")
+  vs <- setdiff(unlist(varsD[[i]]), names(data_clusters))
+  print(vs)
+}
+```
+
+
+```{r}
+for(i in 1:length(varsD)){
+  tab <- descrTable(consenso~ ., data_clusters[c(unlist(varsD[[i]]),"consenso")], 
+                  hide.no=c("No","Hombre"),show.n=T, show.all=F,chisq.test.perm=F,
+                  show.p.trend=F,method = c(mRSS=2,AGEs=2,FRCV=2))
+  assign(paste0("tab",i), tab)
+}
+
+
+export2md(rbind(
+  "1lista"=tab1, 
+  "2lista"=tab2,
+  "3lista"=tab3,
+  "4lista"=tab4,
+  "5lista"=tab5,
+  "6lista"=tab6,
+  "7lista"=tab7,
+  "8lista" =tab8,
+  "9lista"=tab9,
+  "10lista"=tab10
+  ), caption="",header.labels=c("N"="Válidos"))
+```
+
+<br>
+
