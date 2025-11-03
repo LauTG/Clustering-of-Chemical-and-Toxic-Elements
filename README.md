@@ -6,7 +6,7 @@ Este repositorio contiene el **reporte estadístico anonimizado** de un estudio 
 - **Audiencia:** equipo científico/técnico. El documento no revela ni centros, ni patologías específicas, ni fechas exactas.
 
 ## Flujo de trabajo (ETL → Análisis)
-1. **Tratamiento y depuración** (R):
+1. **Tratamiento y depuración**:
    - Carga de datos.
    - Renombrado/transformación de variables, manejo de valores perdidos y atípicos.
    - Estandarización de variables continuas.
