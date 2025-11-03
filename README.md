@@ -21,4 +21,4 @@ Este repositorio contiene el **reporte estadístico anonimizado** de un estudio 
    - Documento reproducible con **RMarkdown**.
 
 ## Paquetes principales (R)
-`tidyverse`, `ggplot2`, `ggpubr`, `naniar`, `broom`, `pwr`, `nortest`, `car`, `kableExtra`, `gridExtra`, `ggfortify`, `reshape`.
+`tidyverse`, `ggplot2`, `ggpubr`, `factoextra`, `FactoMineR`, `cluster`, `mclust`, `clue`, `kableExtra`, `compareGroups`, `ggfortify`, `Hmisc`.
